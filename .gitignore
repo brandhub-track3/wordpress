@@ -1,0 +1,22 @@
+
+# WordPress configuration
+wp-config.php
+
+# User uploads (optional: commit if you want media in Git)
+wp-content/uploads/
+
+# Cache
+wp-content/cache/
+wp-content/upgrade/
+
+# Backup files
+*.bak
+*.sql
+*.zip
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
