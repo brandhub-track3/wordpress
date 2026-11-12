@@ -1,6 +1,7 @@
 
 # WordPress configuration
 wp-config.php
+.env
 
 # User uploads (optional: commit if you want media in Git)
 wp-content/uploads/
