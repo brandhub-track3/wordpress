@@ -1,0 +1,46 @@
+name: brandhub-wordpress
+
+services:
+  wordpress:
+    image: ${WORDPRESS_IMAGE:?WORDPRESS_IMAGE must be set}
+    ports:
+      - "80:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:?WORDPRESS_DB_NAME must be set}
+      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:?WORDPRESS_DB_USER must be set}
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?WORDPRESS_DB_PASSWORD must be set}
+      BRANDHUB_AWS_REGION: ${BRANDHUB_AWS_REGION:?BRANDHUB_AWS_REGION must be set}
+      BRANDHUB_SQS_QUEUE_URL: ${BRANDHUB_SQS_QUEUE_URL:?BRANDHUB_SQS_QUEUE_URL must be set}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - wordpress_uploads:/var/www/html/wp-content/uploads
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE must be set}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER must be set}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set}
+    volumes:
+      - wordpress_db:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h localhost -u root -p\"$${MYSQL_ROOT_PASSWORD}\"",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  wordpress_db:
+    name: brandhub-wordpress-mysql-data
+  wordpress_uploads:
+    name: brandhub-wordpress-uploads
