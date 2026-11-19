@@ -1,0 +1,12 @@
+{
+  "name": "brandhub/brandhub-core",
+  "description": "AWS SDK dependency for the BrandHub WordPress plugin",
+  "type": "wordpress-plugin",
+  "require": {
+    "aws/aws-sdk-php": "^3.300"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}

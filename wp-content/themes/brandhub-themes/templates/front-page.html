@@ -1,0 +1,46 @@
+<!-- wp:template-part {"slug":"header","tagName":"header"} /-->
+<!-- wp:group {"tagName":"main","layout":{"type":"constrained"}} -->
+<main class="wp-block-group">
+  <!-- wp:cover {"url":"","dimRatio":65,"overlayColor":"brand-dark","isUserOverlayColor":true,"minHeight":520,"align":"full","contentPosition":"center center","style":{"spacing":{"padding":{"top":"80px","bottom":"80px","left":"24px","right":"24px"}}}} -->
+  <div class="wp-block-cover alignfull" style="min-height:520px;padding:80px 24px">
+    <span aria-hidden="true" class="wp-block-cover__background has-brand-dark-background-color has-background-dim-70 has-background-dim"></span>
+    <div class="wp-block-cover__inner-container">
+      <!-- wp:heading {"textAlign":"center","level":1,"textColor":"white","fontSize":"x-large"} -->
+      <h1 class="wp-block-heading has-text-align-center has-white-color has-text-color has-x-large-font-size">One place for your brand stories</h1>
+      <!-- /wp:heading -->
+      <!-- wp:paragraph {"align":"center","textColor":"white","fontSize":"large"} -->
+      <p class="has-text-align-center has-white-color has-text-color has-large-font-size">Explore insights, product updates and customer success stories.</p>
+      <!-- /wp:paragraph -->
+      <!-- wp:buttons {"layout":{"type":"flex","justifyContent":"center"}} -->
+      <div class="wp-block-buttons">
+        <!-- wp:button {"backgroundColor":"brand-accent","textColor":"white"} -->
+        <div class="wp-block-button"><a class="wp-block-button__link has-white-color has-brand-accent-background-color has-text-color has-background wp-element-button" href="/wordpress/blog/">Explore the blog</a></div>
+        <!-- /wp:button -->
+      </div>
+      <!-- /wp:buttons -->
+    </div>
+  </div>
+  <!-- /wp:cover -->
+  <!-- wp:group {"layout":{"type":"constrained"},"style":{"spacing":{"padding":{"top":"64px","bottom":"64px","left":"24px","right":"24px"}}}} -->
+  <div class="wp-block-group" style="padding:64px 24px">
+    <!-- wp:heading {"level":2} -->
+    <h2 class="wp-block-heading">Latest insights</h2>
+    <!-- /wp:heading -->
+    <!-- wp:query {"query":{"perPage":3,"postType":"post","order":"desc","orderBy":"date"},"displayLayout":{"type":"flex","columns":3}} -->
+    <div class="wp-block-query">
+      <!-- wp:post-template -->
+        <!-- wp:group {"style":{"spacing":{"blockGap":"12px"},"border":{"width":"1px","color":"#e2e8f0"},"padding":"16px"}} -->
+        <div class="wp-block-group" style="border:1px solid #e2e8f0;padding:16px">
+          <!-- wp:post-featured-image {"isLink":true,"aspectRatio":"16/9"} /-->
+          <!-- wp:post-title {"isLink":true,"level":3} /-->
+          <!-- wp:post-excerpt {"excerptLength":18} /-->
+        </div>
+        <!-- /wp:group -->
+      <!-- /wp:post-template -->
+    </div>
+    <!-- /wp:query -->
+  </div>
+  <!-- /wp:group -->
+</main>
+<!-- /wp:group -->
+<!-- wp:template-part {"slug":"footer","tagName":"footer"} /-->
