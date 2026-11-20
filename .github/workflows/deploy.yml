@@ -7,28 +7,43 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
 
+    steps:
+
+      # -------------------------------------------------------
+      # CHECKOUT
+      # -------------------------------------------------------
+      - name: Check out source
+        uses: actions/checkout@v5
+
+
+      # -------------------------------------------------------
+      # DOCKER BUILDX
+      # -------------------------------------------------------
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+
+      # -------------------------------------------------------
+      # LOGIN TO GHCR
+      # -------------------------------------------------------
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+
+      # -------------------------------------------------------
+      # BUILD AND PUSH WORDPRESS IMAGE
+      # -------------------------------------------------------
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -37,52 +52,118 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.sha }}
             ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
+
+      # -------------------------------------------------------
+      # LOAD EC2 SSH KEY
+      # -------------------------------------------------------
       - name: Load EC2 SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
 
+
+      # -------------------------------------------------------
+      # CONFIGURE EC2 HOST VERIFICATION
+      # -------------------------------------------------------
       - name: Configure known hosts
         env:
           EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
+
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
-          printf '%s\n' "$EC2_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+
+          printf '%s\n' "$EC2_KNOWN_HOSTS" \
+            > "$HOME/.ssh/known_hosts"
+
           chmod 600 "$HOME/.ssh/known_hosts"
 
+
+      # -------------------------------------------------------
+      # CREATE PRODUCTION .env FILE
+      # -------------------------------------------------------
       - name: Create production environment file
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
+
           MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
           MYSQL_USER: ${{ secrets.MYSQL_USER }}
           MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
           MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+
           WORDPRESS_DB_NAME: ${{ secrets.WORDPRESS_DB_NAME }}
           WORDPRESS_DB_USER: ${{ secrets.WORDPRESS_DB_USER }}
           WORDPRESS_DB_PASSWORD: ${{ secrets.WORDPRESS_DB_PASSWORD }}
-          BRANDHUB_AWS_REGION: ${{ secrets.BRANDHUB_AWS_REGION }}
+
+          # Standard AWS SDK credentials.
+          # AWS SDK for PHP automatically reads these variables.
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+          # Plugin/application-specific variables.
+          BRANDHUB_AWS_REGION: ${{ secrets.AWS_REGION }}
           BRANDHUB_SQS_QUEUE_URL: ${{ secrets.BRANDHUB_SQS_QUEUE_URL }}
+
+          # Exact commit SHA image will be deployed.
           WORDPRESS_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
+
         run: |
           set -euo pipefail
+
+          # Check EC2 deployment secrets.
           : "${EC2_HOST:?Set the EC2_HOST production secret}"
           : "${EC2_USER:?Set the EC2_USER production secret}"
-          for key in MYSQL_DATABASE MYSQL_USER MYSQL_PASSWORD MYSQL_ROOT_PASSWORD \
-            WORDPRESS_DB_NAME WORDPRESS_DB_USER WORDPRESS_DB_PASSWORD \
-            BRANDHUB_AWS_REGION BRANDHUB_SQS_QUEUE_URL; do
+
+          # Check all required application secrets.
+          for key in \
+            MYSQL_DATABASE \
+            MYSQL_USER \
+            MYSQL_PASSWORD \
+            MYSQL_ROOT_PASSWORD \
+            WORDPRESS_DB_NAME \
+            WORDPRESS_DB_USER \
+            WORDPRESS_DB_PASSWORD \
+            AWS_ACCESS_KEY_ID \
+            AWS_SECRET_ACCESS_KEY \
+            AWS_REGION \
+            BRANDHUB_AWS_REGION \
+            BRANDHUB_SQS_QUEUE_URL \
+            WORDPRESS_IMAGE
+          do
             if [[ -z "${!key}" ]]; then
               echo "Missing production secret: $key" >&2
               exit 1
             fi
           done
-          [[ "$MYSQL_DATABASE" == "$WORDPRESS_DB_NAME" ]]
-          [[ "$MYSQL_USER" == "$WORDPRESS_DB_USER" ]]
-          [[ "$MYSQL_PASSWORD" == "$WORDPRESS_DB_PASSWORD" ]]
+
+          # WordPress and MySQL must use the same database.
+          [[ "$MYSQL_DATABASE" == "$WORDPRESS_DB_NAME" ]] || {
+            echo "MYSQL_DATABASE and WORDPRESS_DB_NAME must match" >&2
+            exit 1
+          }
+
+          # WordPress and MySQL must use the same DB username.
+          [[ "$MYSQL_USER" == "$WORDPRESS_DB_USER" ]] || {
+            echo "MYSQL_USER and WORDPRESS_DB_USER must match" >&2
+            exit 1
+          }
+
+          # WordPress and MySQL must use the same DB password.
+          [[ "$MYSQL_PASSWORD" == "$WORDPRESS_DB_PASSWORD" ]] || {
+            echo "MYSQL_PASSWORD and WORDPRESS_DB_PASSWORD must match" >&2
+            exit 1
+          }
+
+          # Newly created files will only be readable by the owner.
           umask 077
+
+          # Create .env safely without printing secrets in Actions logs.
           python3 - <<'PY'
           import os
           import sys
@@ -95,33 +176,104 @@ jobs:
               "WORDPRESS_DB_NAME",
               "WORDPRESS_DB_USER",
               "WORDPRESS_DB_PASSWORD",
+              "AWS_ACCESS_KEY_ID",
+              "AWS_SECRET_ACCESS_KEY",
+              "AWS_REGION",
               "BRANDHUB_AWS_REGION",
               "BRANDHUB_SQS_QUEUE_URL",
               "WORDPRESS_IMAGE",
           )
+
           with open(".env", "w", encoding="utf-8", newline="\n") as env_file:
               for key in keys:
                   value = os.environ[key]
+
                   if "\n" in value or "\r" in value:
                       sys.exit(f"{key} must not contain a newline")
+
                   value = value.replace("\\", "\\\\").replace("'", "\\'")
                   env_file.write(f"{key}='{value}'\n")
+
           os.chmod(".env", 0o600)
           PY
 
+
+      # -------------------------------------------------------
+      # DEPLOY TO EC2
+      # -------------------------------------------------------
       - name: Deploy to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
+
         run: |
           set -euo pipefail
+
+          # Always remove temporary .env from GitHub runner.
           trap 'rm -f .env' EXIT
+
           remote="${EC2_USER}@${EC2_HOST}"
-          ssh "$remote" 'mkdir -p "$HOME/wordpress-deploy"'
-          scp docker-compose.prod.yml "$remote:wordpress-deploy/"
-          scp .env "$remote:wordpress-deploy/.env"
+
+          # Create deployment directory on EC2.
           ssh "$remote" \
-            'chmod 600 "$HOME/wordpress-deploy/.env" &&
-             cd "$HOME/wordpress-deploy" &&
-             docker compose -f docker-compose.prod.yml pull wordpress &&
-             docker compose -f docker-compose.prod.yml up -d --remove-orphans'
+            'mkdir -p "$HOME/wordpress-deploy"'
+
+          # Copy production Compose file.
+          scp docker-compose.prod.yml \
+            "$remote:wordpress-deploy/docker-compose.prod.yml"
+
+          # Copy generated production environment file.
+          scp .env \
+            "$remote:wordpress-deploy/.env"
+
+          # Pull exact commit image and update containers.
+          ssh "$remote" '
+            set -e
+
+            chmod 600 "$HOME/wordpress-deploy/.env"
+
+            cd "$HOME/wordpress-deploy"
+
+            docker compose \
+              -f docker-compose.prod.yml \
+              pull wordpress
+
+            docker compose \
+              -f docker-compose.prod.yml \
+              up -d \
+              --remove-orphans
+
+            docker compose \
+              -f docker-compose.prod.yml \
+              ps
+          '
+
+
+      # -------------------------------------------------------
+      # VERIFY WORDPRESS DEPLOYMENT
+      # -------------------------------------------------------
+      - name: Verify deployment
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 12); do
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              --max-time 10 \
+              "http://${EC2_HOST}/" > /dev/null
+            then
+              echo "WordPress deployment is responding successfully."
+              exit 0
+            fi
+
+            echo "Waiting for WordPress: attempt ${attempt}/12"
+            sleep 10
+          done
+
+          echo "WordPress deployment health check failed."
+          exit 1

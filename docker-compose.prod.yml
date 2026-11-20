@@ -1,46 +1,130 @@
 name: brandhub-wordpress
 
 services:
+
+  # =========================================================
+  # WORDPRESS
+  # =========================================================
   wordpress:
+
+    # GitHub Actions/GHCR se exact Docker image aayegi
     image: ${WORDPRESS_IMAGE:?WORDPRESS_IMAGE must be set}
+
+    # EC2 port 80 -> WordPress container port 80
     ports:
       - "80:80"
+
     environment:
+
+      # -----------------------------------------------------
+      # DATABASE CONFIGURATION
+      # -----------------------------------------------------
+
+      # "db" neeche MySQL service ka naam hai
       WORDPRESS_DB_HOST: db:3306
+
       WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:?WORDPRESS_DB_NAME must be set}
+
       WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:?WORDPRESS_DB_USER must be set}
+
       WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?WORDPRESS_DB_PASSWORD must be set}
+
+
+      # -----------------------------------------------------
+      # AWS SDK CREDENTIALS
+      # -----------------------------------------------------
+
+      # AWS SDK for PHP in credentials ko automatically
+      # environment se read kar sakta hai.
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID must be set}
+
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY must be set}
+
+      # Standard AWS region variable
+      AWS_REGION: ${BRANDHUB_AWS_REGION:?BRANDHUB_AWS_REGION must be set}
+
+
+      # -----------------------------------------------------
+      # BRANDHUB AWS/SQS CONFIGURATION
+      # -----------------------------------------------------
+
+      # BrandHub plugin ke liye region
       BRANDHUB_AWS_REGION: ${BRANDHUB_AWS_REGION:?BRANDHUB_AWS_REGION must be set}
+
+      # SQS queue jahan WordPress publish/update message jayega
       BRANDHUB_SQS_QUEUE_URL: ${BRANDHUB_SQS_QUEUE_URL:?BRANDHUB_SQS_QUEUE_URL must be set}
+
+
+    # WordPress DB healthy hone ke baad start hoga
     depends_on:
       db:
         condition: service_healthy
+
+
+    # WordPress uploaded images/files persistent rahenge
     volumes:
       - wordpress_uploads:/var/www/html/wp-content/uploads
+
+
+    # EC2/Docker restart ke baad container automatically restart
     restart: unless-stopped
 
+
+
+  # =========================================================
+  # MYSQL
+  # =========================================================
   db:
+
     image: mysql:8.0
+
     environment:
+
+      # Database name
       MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE must be set}
+
+      # WordPress database user
       MYSQL_USER: ${MYSQL_USER:?MYSQL_USER must be set}
+
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set}
+
+      # MySQL administrative password
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set}
+
+
+    # Database EC2 Docker volume me persist hoga.
+    # Container replace hone par DB delete nahi hoga.
     volumes:
       - wordpress_db:/var/lib/mysql
+
+
+    # MySQL ready hai ya nahi check karega
     healthcheck:
       test:
         [
           "CMD-SHELL",
           "mysqladmin ping -h localhost -u root -p\"$${MYSQL_ROOT_PASSWORD}\"",
         ]
+
       interval: 5s
       timeout: 5s
       retries: 20
+
+
     restart: unless-stopped
 
+
+
+# ===========================================================
+# PERSISTENT VOLUMES
+# ===========================================================
+
 volumes:
+
+  # Existing WordPress MySQL database
   wordpress_db:
     name: brandhub-wordpress-mysql-data
+
+  # Existing WordPress uploaded images/files
   wordpress_uploads:
     name: brandhub-wordpress-uploads
